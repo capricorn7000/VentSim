@@ -41,8 +41,13 @@ class VentilatorSimulationApp {
     this.createLayout();
     
     // Create the display components
-    this.waveformDisplay = new WaveformDisplay('waveform-canvas', {
-      timeWindow: 8 // Show 8 seconds of data
+    this.waveformDisplay = new WaveformDisplay('waveform-container', {
+      timeWindow: 8, // Show 8 seconds of data
+      yRanges: {
+        pressure: [0, 40],    // cmH₂O
+        flow: [-60, 60],      // L/min
+        volume: [0, 800]      // mL
+      }
     });
     
     this.lungVisualization = new LungVisualization('lung-canvas');
@@ -138,16 +143,7 @@ class VentilatorSimulationApp {
     // Apply styles
     this.applyStyles();
     
-    // Set up waveform toggle controls
-    const waveformToggles = document.querySelectorAll('.waveform-controls input');
-    waveformToggles.forEach(toggle => {
-      toggle.addEventListener('change', () => {
-        const waveformType = toggle.dataset.waveform;
-        if (this.waveformDisplay) {
-          this.waveformDisplay.toggleWaveform(waveformType);
-        }
-      });
-    });
+    // Waveform controls are now handled by the WaveformDisplay class
   }
   
   /**
@@ -222,23 +218,21 @@ class VentilatorSimulationApp {
         gap: 20px;
       }
       
-      .waveform-container, .lung-visualization-container {
+      .waveform-panel, .lung-visualization-container {
         background-color: white;
         border-radius: 10px;
         padding: 20px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
       }
       
-      .waveform-container h2, .lung-visualization-container h2 {
+      .waveform-panel h2, .lung-visualization-container h2 {
         color: #2c3e50;
         margin-top: 0;
         margin-bottom: 15px;
       }
       
-      .waveform-controls {
-        display: flex;
-        gap: 20px;
-        margin-top: 10px;
+      #waveform-container {
+        margin-top: 15px;
       }
       
       canvas {
