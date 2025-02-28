@@ -448,9 +448,14 @@ class WaveformDisplay {
         value = visibleData[0].patient.flow * 0.06;
         break;
       case 'volume':
-        // Adjust volume to show tidal volume (current - residual)
-        // Make sure it doesn't go below zero for display purposes
-        value = Math.max(0, visibleData[0].patient.volume - this.options.residualVolume);
+        // Use tidal volume if available, otherwise calculate from residual
+        if (visibleData[0].patient.tidalVolume !== undefined) {
+          value = Math.max(0, visibleData[0].patient.tidalVolume);
+        } else {
+          // Adjust volume to show tidal volume (current - residual)
+          // Make sure it doesn't go below zero for display purposes
+          value = Math.max(0, visibleData[0].patient.volume - this.options.residualVolume);
+        }
         break;
     }
     
@@ -471,9 +476,14 @@ class WaveformDisplay {
           value = visibleData[i].patient.flow * 0.06;
           break;
         case 'volume':
-          // Adjust volume to show tidal volume (current - residual)
-          // Make sure it doesn't go below zero for display purposes
-          value = Math.max(0, visibleData[i].patient.volume - this.options.residualVolume);
+          // Use tidal volume if available, otherwise calculate from residual
+          if (visibleData[i].patient.tidalVolume !== undefined) {
+            value = Math.max(0, visibleData[i].patient.tidalVolume);
+          } else {
+            // Adjust volume to show tidal volume (current - residual)
+            // Make sure it doesn't go below zero for display purposes
+            value = Math.max(0, visibleData[i].patient.volume - this.options.residualVolume);
+          }
           break;
       }
       

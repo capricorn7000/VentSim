@@ -100,8 +100,12 @@ class VentilatorSimulationApp {
       console.error("Error creating patient status display:", e);
     }
     
-    // Set up the simulation update loop
-    this.simulation.start(state => this.updateDisplays(state));
+    // Set up the simulation update loop - Don't auto-start
+    // This will allow users to click Start explicitly
+    // this.simulation.start(state => this.updateDisplays(state));
+    
+    // Initialize displays with initial data
+    this.updateDisplays(this.simulation.simulationData[0]);
     
     // Add event listener for model toggle
     const advancedModelToggle = document.getElementById('advanced-model-toggle');
@@ -204,10 +208,11 @@ class VentilatorSimulationApp {
     const style = document.createElement('style');
     style.textContent = `
       body {
-        font-family: sans-serif;
+        font-family: 'Roboto', sans-serif;
         margin: 0;
         padding: 0;
-        background-color: #f0f0f0;
+        background-color: #f5f5f5;
+        color: #333;
       }
       
       .ventilator-simulator {
@@ -219,11 +224,15 @@ class VentilatorSimulationApp {
       .simulator-header {
         text-align: center;
         margin-bottom: 20px;
+        padding: 20px 0;
+        border-bottom: 1px solid #e0e0e0;
       }
       
       .simulator-header h1 {
-        color: #2c3e50;
+        color: #2196F3;
         margin: 0;
+        font-size: 32px;
+        font-weight: 300;
       }
       
       .simulator-body {
@@ -247,15 +256,17 @@ class VentilatorSimulationApp {
       
       .waveform-panel, .lung-visualization-container {
         background-color: white;
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 20px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
       
       .waveform-panel h2, .lung-visualization-container h2 {
-        color: #2c3e50;
+        color: #2196F3;
         margin-top: 0;
         margin-bottom: 15px;
+        font-weight: 400;
+        font-size: 22px;
       }
       
       #waveform-container {
@@ -283,6 +294,15 @@ class VentilatorSimulationApp {
     
     // Add the style to the document
     document.head.appendChild(style);
+    
+    // Add Google Fonts for the main app
+    if (!document.getElementById('google-fonts-main')) {
+      const fontLink = document.createElement('link');
+      fontLink.id = 'google-fonts-main';
+      fontLink.href = 'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap';
+      fontLink.rel = 'stylesheet';
+      document.head.appendChild(fontLink);
+    }
   }
 }
 

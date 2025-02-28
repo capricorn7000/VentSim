@@ -19,7 +19,7 @@ class VentilatorModel {
       ieRatio: 0.5,                  // I:E ratio (1:2)
       fio2: 0.5,                     // Fraction of inspired oxygen
       triggerSensitivity: -2,        // Pressure trigger threshold (cmH₂O)
-      riseTime: 0.1                  // Pressure rise time (seconds)
+      riseTime: 100                  // Pressure rise time (milliseconds)
     };
     
     // Calculated parameters
@@ -64,7 +64,11 @@ class VentilatorModel {
       }
       // Inspiration phase - calculate target pressure with rise time
       const percentComplete = cycleTime / this.inspirationTime;
-      const riseTimeFactor = Math.min(1, cycleTime / (this.settings.riseTime));
+      
+      // Use rise time in calculation (convert ms to seconds)
+      const riseTimeSec = this.settings.riseTime / 1000;
+      const riseTimeFactor = Math.min(1, cycleTime / riseTimeSec);
+      
       return this.settings.peep + (this.settings.pControl * riseTimeFactor);
     } else {
       if (this.currentPhase !== 'expiration') {
@@ -104,13 +108,62 @@ class BasicPatientModel {
       compliance: 50,         // Lung compliance (mL/cmH₂O)
       resistance: 10,         // Airway resistance (cmH₂O·s/L)
       residualVolume: 1000,   // Residual volume (mL) - volume at PEEP
+      ibw: 70,                // Ideal body weight (kg)
     };
+    
+    // Calculated patient parameters based on IBW
+    this.calculatedParameters = {
+      predictedTLC: 0,        // Total lung capacity (mL)
+      predictedVC: 0,         // Vital capacity (mL)
+      predictedRV: 0,         // Residual volume (mL)
+      predictedFRC: 0,        // Functional residual capacity (mL)
+    };
+    
+    // Recalculate parameters based on IBW
+    this.updatePredictedValues();
     
     // Internal state
     this.currentVolume = this.parameters.residualVolume;
     this.currentFlow = 0;
     this.lastPressure = 0;
     this.lastTime = 0;
+    
+    // Assumptions for the model
+    this.modelAssumptions = [
+      { parameter: "Model Type", value: "Single-compartment linear model" },
+      { parameter: "Compliance", value: "Linear and constant" },
+      { parameter: "Resistance", value: "Linear and constant" },
+      { parameter: "Volume at PEEP", value: "Functional residual capacity" },
+      { parameter: "Chest Wall", value: "Not modeled separately" },
+      { parameter: "Auto-PEEP", value: "Not modeled" },
+      { parameter: "Recruitment", value: "Not modeled in basic model" },
+    ];
+  }
+  
+  /**
+   * Update predicted respiratory values based on ideal body weight
+   */
+  updatePredictedValues() {
+    const ibw = this.parameters.ibw;
+    const isMale = true; // Default assumption, can be made configurable
+    
+    // Predicted values based on common formulas
+    // These are simplified approximations
+    if (isMale) {
+      this.calculatedParameters.predictedTLC = 7.99 * ibw; // ~80 mL/kg
+      this.calculatedParameters.predictedVC = 4.5 * ibw;   // ~45 mL/kg
+      this.calculatedParameters.predictedRV = 1.31 * ibw;  // ~13 mL/kg
+    } else {
+      this.calculatedParameters.predictedTLC = 6.6 * ibw;  // ~66 mL/kg
+      this.calculatedParameters.predictedVC = 3.9 * ibw;   // ~39 mL/kg
+      this.calculatedParameters.predictedRV = 1.18 * ibw;  // ~12 mL/kg
+    }
+    
+    this.calculatedParameters.predictedFRC = 2.4 * ibw;  // ~24 mL/kg
+    
+    // Set residual volume to predicted FRC
+    this.parameters.residualVolume = this.calculatedParameters.predictedFRC;
+    this.currentVolume = this.parameters.residualVolume;
   }
   
   /**
@@ -119,6 +172,11 @@ class BasicPatientModel {
    */
   updateParameters(newParameters) {
     this.parameters = {...this.parameters, ...newParameters};
+    
+    // If IBW was updated, recalculate predicted values
+    if (newParameters.ibw !== undefined) {
+      this.updatePredictedValues();
+    }
   }
   
   /**
@@ -141,6 +199,8 @@ class BasicPatientModel {
       // First-order response equation for volume change
       // V(t) = Vfinal - (Vfinal - Vinitial) * e^(-t/τ)
       const volumeChange = (targetVolume - this.currentVolume) * (1 - Math.exp(-deltaTime / timeConstant));
+      
+      // Update volume
       this.currentVolume += volumeChange;
       
       // Calculate flow as the rate of volume change
@@ -154,7 +214,10 @@ class BasicPatientModel {
       volume: this.currentVolume,
       flow: this.currentFlow,
       pressure,
-      time
+      time,
+      parameters: this.parameters,
+      calculatedParameters: this.calculatedParameters,
+      tidalVolume: Math.max(0, this.currentVolume - this.parameters.residualVolume)
     };
   }
 }
@@ -349,6 +412,32 @@ class VentilatorSimulation {
     this.simulationData = [];
     this.isRunning = false;
     this.simulationInterval = null;
+    
+    // Initialize with some data points so displays have something to show
+    this.initializeData();
+  }
+  
+  /**
+   * Initialize with a few data points to populate displays
+   */
+  initializeData() {
+    // Create a few initial data points for display
+    const initialState = {
+      time: 0,
+      ventilator: this.ventilator.getState(0),
+      patient: {
+        volume: this.patient.parameters.residualVolume,
+        flow: 0,
+        pressure: this.ventilator.settings.peep,
+        time: 0,
+        parameters: this.patient.parameters,
+        calculatedParameters: this.patient.calculatedParameters,
+        tidalVolume: 0
+      }
+    };
+    
+    // Add a few data points to make initial display look good
+    this.simulationData.push(initialState);
   }
   
   /**
@@ -463,6 +552,9 @@ class VentilatorSimulation {
     } else {
       this.advancedPatient = new AdvancedPatientModel(10);
     }
+    
+    // Initialize with some data points
+    this.initializeData();
   }
   
   /**
