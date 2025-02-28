@@ -37,20 +37,22 @@ class VentilatorSimulationApp {
    * Initialize the application and UI components
    */
   initialize() {
-    // Create the main layout
+    // Create the main layout first
     this.createLayout();
     
-    // Create the display components
-    this.waveformDisplay = new WaveformDisplay('waveform-container', {
-      timeWindow: 8, // Show 8 seconds of data
-      yRanges: {
-        pressure: [0, 40],    // cmH₂O
-        flow: [-60, 60],      // L/min
-        volume: [0, 800]      // mL
-      }
-    });
-    
-    this.lungVisualization = new LungVisualization('lung-canvas');
+    // Wait a moment for the DOM to fully update
+    setTimeout(() => {
+      // Create the display components after the layout is ready
+      this.waveformDisplay = new WaveformDisplay('waveform-container', {
+        timeWindow: 8, // Show 8 seconds of data
+        yRanges: {
+          pressure: [0, 40],    // cmH₂O
+          flow: [-60, 60],      // L/min
+          volume: [0, 800]      // mL
+        }
+      });
+      
+      this.lungVisualization = new LungVisualization('lung-canvas');
     
     // Create the UI components
     this.ventilatorControls = new VentilatorControlPanel(
@@ -72,6 +74,7 @@ class VentilatorSimulationApp {
         this.state.isAdvancedModel = e.target.checked;
       });
     }
+    }, 100); // End of setTimeout
     
     // Add event listeners for patient preset buttons
     const presetButtons = document.querySelectorAll('#patient-presets button');
