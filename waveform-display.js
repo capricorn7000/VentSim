@@ -1,20 +1,20 @@
 /**
- * Waveform Display Component
+ * Multi-Waveform Display Component
  * 
  * This component handles the visualization of ventilator waveforms
- * (pressure, flow, volume) based on simulation data.
+ * (pressure, flow, volume) as separate graphs based on simulation data.
  */
 
 class WaveformDisplay {
-  constructor(canvasId, options = {}) {
-    // Get the canvas element
-    this.canvas = document.getElementById(canvasId);
-    if (!this.canvas) {
-      throw new Error(`Canvas element with ID "${canvasId}" not found`);
-    }
+  constructor(containerElement, options = {}) {
+    // Get or create the container element
+    this.container = typeof containerElement === 'string' ? 
+                     document.getElementById(containerElement) : 
+                     containerElement;
     
-    // Set up canvas context
-    this.ctx = this.canvas.getContext('2d');
+    if (!this.container) {
+      throw new Error('Waveform container element not found');
+    }
     
     // Configuration options with defaults
     this.options = {
@@ -32,29 +32,257 @@ class WaveformDisplay {
         pressure: [0, 40],    // cmH₂O
         flow: [-60, 60],      // L/min
         volume: [0, 800]      // mL
-      }
+      },
+      waveformHeight: options.waveformHeight || 150,  // Height of each waveform canvas
+      waveformSpacing: options.waveformSpacing || 30  // Spacing between waveforms
     };
     
     // Data to display
     this.data = [];
     
-    // Active waveforms to display
-    this.activeWaveforms = options.activeWaveforms || ['pressure', 'flow', 'volume'];
+    // Active waveforms and their canvases
+    this.waveforms = [
+      { type: 'pressure', label: 'Pressure (cmH₂O)', canvas: null, ctx: null, visible: true },
+      { type: 'flow', label: 'Flow (L/min)', canvas: null, ctx: null, visible: true },
+      { type: 'volume', label: 'Volume (mL)', canvas: null, ctx: null, visible: true }
+    ];
     
-    // Initialize the canvas
-    this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    // Create the waveform display structure
+    this.createWaveformDisplays();
+    
+    // Initialize event listeners
+    this.setupEventListeners();
+    
+    // Handle window resize
+    window.addEventListener('resize', () => this.resizeCanvases());
   }
   
   /**
-   * Resize the canvas to fill its container while maintaining aspect ratio
+   * Create the waveform display structure with separate canvases
    */
-  resizeCanvas() {
-    const container = this.canvas.parentElement;
-    const containerWidth = container.clientWidth;
+  createWaveformDisplays() {
+    // Clear the container
+    this.container.innerHTML = '';
     
-    this.canvas.width = containerWidth;
-    this.canvas.height = containerWidth * 0.4; // 5:2 aspect ratio
+    // Create waveform controls
+    const controlsDiv = document.createElement('div');
+    controlsDiv.className = 'waveform-global-controls';
+    controlsDiv.innerHTML = `
+      <div class="time-window-control">
+        <label for="time-window">Time Window: </label>
+        <input type="range" id="time-window" min="2" max="20" step="1" value="${this.options.timeWindow}">
+        <span id="time-window-value">${this.options.timeWindow}s</span>
+      </div>
+    `;
+    this.container.appendChild(controlsDiv);
+    
+    // Create individual waveform containers
+    this.waveforms.forEach(waveform => {
+      const waveformContainer = document.createElement('div');
+      waveformContainer.className = 'waveform-container';
+      waveformContainer.dataset.type = waveform.type;
+      
+      // Create header with controls
+      const header = document.createElement('div');
+      header.className = 'waveform-header';
+      header.innerHTML = `
+        <div class="waveform-title" style="color: ${this.options.lineColors[waveform.type]}">
+          ${waveform.label}
+        </div>
+        <div class="waveform-controls">
+          <label class="range-control">
+            <span>Min:</span>
+            <input type="number" class="y-min" 
+                   value="${this.options.yRanges[waveform.type][0]}" 
+                   data-waveform="${waveform.type}">
+          </label>
+          <label class="range-control">
+            <span>Max:</span>
+            <input type="number" class="y-max" 
+                   value="${this.options.yRanges[waveform.type][1]}" 
+                   data-waveform="${waveform.type}">
+          </label>
+          <label class="visibility-control">
+            <input type="checkbox" class="visibility-toggle" 
+                   data-waveform="${waveform.type}" ${waveform.visible ? 'checked' : ''}>
+            <span>Show</span>
+          </label>
+        </div>
+      `;
+      waveformContainer.appendChild(header);
+      
+      // Create canvas
+      const canvas = document.createElement('canvas');
+      canvas.className = 'waveform-canvas';
+      canvas.id = `waveform-${waveform.type}`;
+      canvas.height = this.options.waveformHeight;
+      waveformContainer.appendChild(canvas);
+      
+      // Store canvas reference
+      waveform.canvas = canvas;
+      waveform.ctx = canvas.getContext('2d');
+      
+      // Add to container
+      this.container.appendChild(waveformContainer);
+    });
+    
+    // Apply styles
+    this.applyStyles();
+    
+    // Initial sizing
+    this.resizeCanvases();
+  }
+  
+  /**
+   * Set up event listeners for controls
+   */
+  setupEventListeners() {
+    // Time window control
+    const timeWindowInput = document.getElementById('time-window');
+    if (timeWindowInput) {
+      timeWindowInput.addEventListener('input', () => {
+        this.options.timeWindow = parseInt(timeWindowInput.value);
+        document.getElementById('time-window-value').textContent = `${this.options.timeWindow}s`;
+        this.draw();
+      });
+    }
+    
+    // Y-axis range controls
+    document.querySelectorAll('.y-min, .y-max').forEach(input => {
+      input.addEventListener('change', () => {
+        const waveformType = input.dataset.waveform;
+        const isMin = input.classList.contains('y-min');
+        const value = parseFloat(input.value);
+        
+        if (!isNaN(value)) {
+          if (isMin) {
+            this.options.yRanges[waveformType][0] = value;
+          } else {
+            this.options.yRanges[waveformType][1] = value;
+          }
+          this.draw();
+        }
+      });
+    });
+    
+    // Visibility toggles
+    document.querySelectorAll('.visibility-toggle').forEach(toggle => {
+      toggle.addEventListener('change', () => {
+        const waveformType = toggle.dataset.waveform;
+        const waveform = this.waveforms.find(w => w.type === waveformType);
+        if (waveform) {
+          waveform.visible = toggle.checked;
+          
+          // Show/hide the canvas container
+          const container = toggle.closest('.waveform-container');
+          if (container) {
+            container.querySelector('canvas').style.display = toggle.checked ? 'block' : 'none';
+          }
+          
+          this.draw();
+        }
+      });
+    });
+  }
+  
+  /**
+   * Apply CSS styles to the waveform displays
+   */
+  applyStyles() {
+    // Create a style element if it doesn't exist
+    let styleElement = document.getElementById('waveform-display-styles');
+    if (!styleElement) {
+      styleElement = document.createElement('style');
+      styleElement.id = 'waveform-display-styles';
+      document.head.appendChild(styleElement);
+    }
+    
+    // Set the CSS
+    styleElement.textContent = `
+      .waveform-global-controls {
+        margin-bottom: 15px;
+        display: flex;
+        justify-content: space-between;
+        background-color: #f0f0f0;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      
+      .time-window-control {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .waveform-container {
+        margin-bottom: ${this.options.waveformSpacing}px;
+        background-color: white;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+        overflow: hidden;
+      }
+      
+      .waveform-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background-color: #f7f7f7;
+        border-bottom: 1px solid #ddd;
+      }
+      
+      .waveform-title {
+        font-weight: bold;
+        font-size: 14px;
+      }
+      
+      .waveform-controls {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+      }
+      
+      .range-control {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+      }
+      
+      .range-control input[type="number"] {
+        width: 60px;
+        padding: 2px 5px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+      }
+      
+      .visibility-control {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+      }
+      
+      .waveform-canvas {
+        display: block;
+        width: 100%;
+        background-color: ${this.options.backgroundColor};
+      }
+    `;
+  }
+  
+  /**
+   * Resize all waveform canvases to fill the container width
+   */
+  resizeCanvases() {
+    const containerWidth = this.container.clientWidth;
+    
+    this.waveforms.forEach(waveform => {
+      if (waveform.canvas) {
+        waveform.canvas.width = containerWidth;
+        // Height is fixed by the options.waveformHeight value
+      }
+    });
     
     // Redraw after resize
     this.draw();
@@ -70,67 +298,64 @@ class WaveformDisplay {
   }
   
   /**
-   * Toggle the visibility of a specific waveform
-   * @param {string} waveformName - Name of the waveform to toggle
-   */
-  toggleWaveform(waveformName) {
-    const index = this.activeWaveforms.indexOf(waveformName);
-    if (index === -1) {
-      this.activeWaveforms.push(waveformName);
-    } else {
-      this.activeWaveforms.splice(index, 1);
-    }
-    this.draw();
-  }
-  
-  /**
-   * Draw the waveform display
+   * Draw all visible waveforms
    */
   draw() {
-    const { ctx, canvas, options } = this;
-    const { width, height } = canvas;
-    const padding = options.padding;
-    
-    // Clear the canvas
-    ctx.fillStyle = options.backgroundColor;
-    ctx.fillRect(0, 0, width, height);
-    
-    // If no data, just draw the grid and exit
     if (!this.data || this.data.length === 0) {
-      this.drawGrid();
+      // Clear all canvases and draw empty grids
+      this.waveforms.forEach(waveform => {
+        if (waveform.visible) {
+          this.clearAndDrawGrid(waveform);
+        }
+      });
       return;
     }
     
-    // Draw grid
-    this.drawGrid();
-    
     // Calculate the visible time range
     const latestTime = this.data[this.data.length - 1].time;
-    const startTime = Math.max(0, latestTime - options.timeWindow);
+    const startTime = Math.max(0, latestTime - this.options.timeWindow);
     
-    // Draw each active waveform
-    this.activeWaveforms.forEach(waveform => {
-      this.drawWaveform(waveform, startTime, latestTime);
+    // Draw each visible waveform
+    this.waveforms.forEach(waveform => {
+      if (waveform.visible) {
+        this.drawSingleWaveform(waveform, startTime, latestTime);
+      }
     });
-    
-    // Add legends for active waveforms
-    this.drawLegends();
   }
   
   /**
-   * Draw the background grid
+   * Clear a canvas and draw the grid
+   * @param {Object} waveform - Waveform configuration object
    */
-  drawGrid() {
-    const { ctx, canvas, options } = this;
+  clearAndDrawGrid(waveform) {
+    const { ctx, canvas } = waveform;
     const { width, height } = canvas;
-    const padding = options.padding;
+    const padding = this.options.padding;
     
-    ctx.strokeStyle = options.gridColor;
+    // Clear the canvas
+    ctx.fillStyle = this.options.backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw grid
+    this.drawGridForWaveform(waveform);
+  }
+  
+  /**
+   * Draw grid for a specific waveform
+   * @param {Object} waveform - Waveform configuration object
+   */
+  drawGridForWaveform(waveform) {
+    const { ctx, canvas, type } = waveform;
+    const { width, height } = canvas;
+    const padding = this.options.padding;
+    const [minY, maxY] = this.options.yRanges[type];
+    
+    ctx.strokeStyle = this.options.gridColor;
     ctx.lineWidth = 0.5;
     
     // Draw vertical time grid lines (every second)
-    for (let i = 0; i <= options.timeWindow; i++) {
-      const x = padding + ((width - 2 * padding) * i / options.timeWindow);
+    for (let i = 0; i <= this.options.timeWindow; i++) {
+      const x = padding + ((width - 2 * padding) * i / this.options.timeWindow);
       ctx.beginPath();
       ctx.moveTo(x, padding);
       ctx.lineTo(x, height - padding);
@@ -143,13 +368,23 @@ class WaveformDisplay {
       ctx.fillText(`${i}s`, x, height - padding / 2);
     }
     
-    // Draw horizontal grid lines (4 divisions)
+    // Draw horizontal grid lines (5 divisions)
+    const yRange = maxY - minY;
+    const yStep = yRange / 4;
+    
     for (let i = 0; i <= 4; i++) {
       const y = padding + ((height - 2 * padding) * i / 4);
       ctx.beginPath();
       ctx.moveTo(padding, y);
       ctx.lineTo(width - padding, y);
       ctx.stroke();
+      
+      // Add y-axis labels
+      const yValue = maxY - (i * yStep);
+      ctx.fillStyle = '#333';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(yValue.toFixed(1), padding - 5, y);
     }
     
     // Draw axes
@@ -170,37 +405,40 @@ class WaveformDisplay {
   }
   
   /**
-   * Draw a specific waveform
-   * @param {string} waveformType - Type of waveform ('pressure', 'flow', or 'volume')
+   * Draw a single waveform graph
+   * @param {Object} waveform - Waveform configuration object
    * @param {number} startTime - Start time for the visible window
    * @param {number} endTime - End time for the visible window
    */
-  drawWaveform(waveformType, startTime, endTime) {
-    const { ctx, canvas, options, data } = this;
+  drawSingleWaveform(waveform, startTime, endTime) {
+    const { ctx, canvas, type } = waveform;
     const { width, height } = canvas;
-    const padding = options.padding;
+    const padding = this.options.padding;
     const plotWidth = width - 2 * padding;
     const plotHeight = height - 2 * padding;
     
+    // Clear and draw grid
+    this.clearAndDrawGrid(waveform);
+    
     // Select data points in the visible time range
-    const visibleData = data.filter(point => 
+    const visibleData = this.data.filter(point => 
       point.time >= startTime && point.time <= endTime
     );
     
     if (visibleData.length < 2) return;
     
     // Get the y-value range for this waveform
-    const [minY, maxY] = options.yRanges[waveformType];
+    const [minY, maxY] = this.options.yRanges[type];
     const yRange = maxY - minY;
     
     // Path for the waveform
     ctx.beginPath();
-    ctx.strokeStyle = options.lineColors[waveformType];
-    ctx.lineWidth = options.lineWidth;
+    ctx.strokeStyle = this.options.lineColors[type];
+    ctx.lineWidth = this.options.lineWidth;
     
     // Map the first point
     let value;
-    switch (waveformType) {
+    switch (type) {
       case 'pressure':
         value = visibleData[0].patient.pressure;
         break;
@@ -210,8 +448,7 @@ class WaveformDisplay {
         break;
       case 'volume':
         // Adjust volume to show tidal volume (current - residual)
-        value = visibleData[0].patient.volume - 
-                (waveformType === 'volume' ? 1000 : 0); // Remove residual volume
+        value = visibleData[0].patient.volume - 1000; // Remove residual volume
         break;
     }
     
@@ -223,7 +460,7 @@ class WaveformDisplay {
     
     // Draw the rest of the points
     for (let i = 1; i < visibleData.length; i++) {
-      switch (waveformType) {
+      switch (type) {
         case 'pressure':
           value = visibleData[i].patient.pressure;
           break;
@@ -233,8 +470,7 @@ class WaveformDisplay {
           break;
         case 'volume':
           // Adjust volume to show tidal volume
-          value = visibleData[i].patient.volume - 
-                  (waveformType === 'volume' ? 1000 : 0); // Remove residual volume
+          value = visibleData[i].patient.volume - 1000; // Remove residual volume
           break;
       }
       
@@ -245,47 +481,61 @@ class WaveformDisplay {
     }
     
     ctx.stroke();
+    
+    // Add zero line for flow (since it can be negative)
+    if (type === 'flow' && minY < 0 && maxY > 0) {
+      const zeroY = height - padding - ((0 - minY) / yRange) * plotHeight;
+      
+      ctx.beginPath();
+      ctx.strokeStyle = '#999';
+      ctx.setLineDash([5, 5]);
+      ctx.moveTo(padding, zeroY);
+      ctx.lineTo(width - padding, zeroY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
   
   /**
-   * Draw the legend for active waveforms
+   * Set the Y-axis range for a specific waveform
+   * @param {string} waveformType - Type of waveform ('pressure', 'flow', or 'volume')
+   * @param {Array} range - [min, max] array for Y-axis range
    */
-  drawLegends() {
-    const { ctx, canvas, options } = this;
-    const { width } = canvas;
-    const legendY = 15;
-    const legendSpacing = 100;
-    
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    
-    this.activeWaveforms.forEach((waveform, index) => {
-      const legendX = width - 350 + (index * legendSpacing);
+  setYAxisRange(waveformType, range) {
+    if (this.options.yRanges[waveformType]) {
+      this.options.yRanges[waveformType] = range;
       
-      // Draw color indicator
-      ctx.fillStyle = options.lineColors[waveform];
-      ctx.fillRect(legendX, legendY - 5, 15, 10);
+      // Update input fields if they exist
+      const minInput = document.querySelector(`.y-min[data-waveform="${waveformType}"]`);
+      const maxInput = document.querySelector(`.y-max[data-waveform="${waveformType}"]`);
       
-      // Draw label
-      ctx.fillStyle = '#333';
-      let label = waveform.charAt(0).toUpperCase() + waveform.slice(1);
+      if (minInput) minInput.value = range[0];
+      if (maxInput) maxInput.value = range[1];
       
-      // Add units
-      switch (waveform) {
-        case 'pressure':
-          label += ' (cmH₂O)';
-          break;
-        case 'flow':
-          label += ' (L/min)';
-          break;
-        case 'volume':
-          label += ' (mL)';
-          break;
+      this.draw();
+    }
+  }
+  
+  /**
+   * Toggle the visibility of a specific waveform
+   * @param {string} waveformType - Type of waveform to toggle
+   */
+  toggleWaveform(waveformType) {
+    const waveform = this.waveforms.find(w => w.type === waveformType);
+    if (waveform) {
+      waveform.visible = !waveform.visible;
+      
+      // Update checkbox if it exists
+      const checkbox = document.querySelector(`.visibility-toggle[data-waveform="${waveformType}"]`);
+      if (checkbox) checkbox.checked = waveform.visible;
+      
+      // Show/hide the canvas
+      if (waveform.canvas) {
+        waveform.canvas.style.display = waveform.visible ? 'block' : 'none';
       }
       
-      ctx.fillText(label, legendX + 20, legendY);
-    });
+      this.draw();
+    }
   }
 }
 
