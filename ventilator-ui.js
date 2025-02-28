@@ -116,17 +116,39 @@ class VentilatorControlPanel {
           <button id="pause-btn" class="action-button pause" disabled>Pause</button>
           <button id="alarm-silence-btn" class="action-button">Silence Alarm</button>
         </div>
-        <div class="patient-model-switch">
-          <label>
-            <input type="checkbox" id="advanced-model-toggle">
-            Use Advanced Patient Model
-          </label>
-        </div>
-        <div id="patient-presets" class="patient-presets" style="display: none;">
-          <button data-preset="normal">Normal</button>
-          <button data-preset="ards-mild">ARDS (Mild)</button>
-          <button data-preset="ards-severe">ARDS (Severe)</button>
-          <button data-preset="copd">COPD</button>
+        
+        <div class="patient-model-section">
+          <h3>Patient Parameters</h3>
+          
+          <div class="control-group">
+            <label for="compliance-knob">Compliance</label>
+            <div class="knob-container">
+              <input type="range" id="compliance-knob" min="10" max="100" step="5" value="50">
+              <div class="knob-value" id="compliance-value">50 mL/cmH₂O</div>
+            </div>
+          </div>
+          
+          <div class="control-group">
+            <label for="resistance-knob">Resistance</label>
+            <div class="knob-container">
+              <input type="range" id="resistance-knob" min="5" max="50" step="1" value="10">
+              <div class="knob-value" id="resistance-value">10 cmH₂O·s/L</div>
+            </div>
+          </div>
+          
+          <div class="patient-model-switch">
+            <label>
+              <input type="checkbox" id="advanced-model-toggle">
+              Use Advanced Patient Model
+            </label>
+          </div>
+          
+          <div id="patient-presets" class="patient-presets" style="display: none;">
+            <button data-preset="normal">Normal</button>
+            <button data-preset="ards-mild">ARDS (Mild)</button>
+            <button data-preset="ards-severe">ARDS (Severe)</button>
+            <button data-preset="copd">COPD</button>
+          </div>
         </div>
       </div>
     `;
@@ -136,6 +158,9 @@ class VentilatorControlPanel {
     
     // Set up event listeners
     this.setupEventListeners();
+    
+    // Initialize patient parameters based on simulation
+    this.updatePatientParameterControls();
     
     // Apply initial CSS
     this.applyStyles();
@@ -213,15 +238,42 @@ class VentilatorControlPanel {
       startBtn.disabled = false;
     });
     
+    // Patient parameters - Compliance
+    const complianceKnob = document.getElementById('compliance-knob');
+    complianceKnob.addEventListener('input', () => {
+      const value = parseInt(complianceKnob.value);
+      document.getElementById('compliance-value').textContent = `${value} mL/cmH₂O`;
+      
+      // Update basic patient model parameters
+      this.simulation.updatePatientParameters({
+        compliance: value
+      });
+    });
+    
+    // Patient parameters - Resistance
+    const resistanceKnob = document.getElementById('resistance-knob');
+    resistanceKnob.addEventListener('input', () => {
+      const value = parseInt(resistanceKnob.value);
+      document.getElementById('resistance-value').textContent = `${value} cmH₂O·s/L`;
+      
+      // Update basic patient model parameters
+      this.simulation.updatePatientParameters({
+        resistance: value
+      });
+    });
+    
     // Advanced model toggle
     const advancedModelToggle = document.getElementById('advanced-model-toggle');
     advancedModelToggle.addEventListener('change', () => {
       const useAdvanced = advancedModelToggle.checked;
       this.simulation.setPatientModel(useAdvanced);
       
-      // Show/hide patient presets
+      // Show/hide patient presets and basic patient controls
       document.getElementById('patient-presets').style.display = 
         useAdvanced ? 'block' : 'none';
+      
+      // Update the UI with current parameters
+      this.updatePatientParameterControls();
     });
     
     // Patient presets
@@ -236,6 +288,40 @@ class VentilatorControlPanel {
         button.classList.add('active');
       });
     });
+  }
+  
+  /**
+   * Update patient parameter controls based on current simulation state
+   */
+  updatePatientParameterControls() {
+    // Get current patient parameters from the simulation
+    let patientParams;
+    
+    if (this.simulation.useAdvancedModel) {
+      // For advanced model, controls are disabled as parameters are set by presets
+      document.getElementById('compliance-knob').disabled = true;
+      document.getElementById('resistance-knob').disabled = true;
+    } else {
+      // For basic model, enable controls and set to current values
+      document.getElementById('compliance-knob').disabled = false;
+      document.getElementById('resistance-knob').disabled = false;
+      
+      patientParams = this.simulation.patient.parameters;
+      
+      // Update the UI controls to match the current parameters
+      if (patientParams) {
+        const complianceKnob = document.getElementById('compliance-knob');
+        const resistanceKnob = document.getElementById('resistance-knob');
+        
+        complianceKnob.value = patientParams.compliance;
+        resistanceKnob.value = patientParams.resistance;
+        
+        document.getElementById('compliance-value').textContent = 
+          `${patientParams.compliance} mL/cmH₂O`;
+        document.getElementById('resistance-value').textContent = 
+          `${patientParams.resistance} cmH₂O·s/L`;
+      }
+    }
   }
   
   /**
@@ -466,6 +552,16 @@ class VentilatorControlPanel {
       
       .patient-presets button:hover {
         opacity: 0.9;
+      }
+      
+      .patient-model-section {
+        margin-top: 15px;
+      }
+      
+      .patient-model-section h3 {
+        color: #ecf0f1;
+        margin-top: 0;
+        margin-bottom: 15px;
       }
     `;
     

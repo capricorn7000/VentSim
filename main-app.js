@@ -29,42 +29,21 @@ class VentilatorSimulationApp {
       patientSeverity: 'moderate'
     };
     
-    // Initialize the application when DOM is fully loaded - IMPROVED DOM READY CHECK
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.initialize());
-    } else {
-      // If DOM is already loaded, initialize immediately
-      this.initialize();
-    }
+    // Initialize the application when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => this.initialize());
   }
   
   /**
    * Initialize the application and UI components
    */
   initialize() {
-    // DEBUG: Log initialization start
-    console.log("Initializing application..."); // <-- DEBUGGING CODE
-    
     // Create the main layout first
     this.createLayout();
     
-    // DEBUG: Log layout creation
-    console.log("Layout created, initializing components..."); // <-- DEBUGGING CODE
-    
-    // DEBUG: Check if waveform container exists
-    const waveformContainer = document.getElementById('waveform-container');
-    if (!waveformContainer) {
-      console.error("Waveform container not found in DOM!"); // <-- DEBUGGING CODE
-    } else {
-      console.log("Waveform container found, dimensions:", 
-                  waveformContainer.offsetWidth, "x", waveformContainer.offsetHeight); // <-- DEBUGGING CODE
-    }
-    
-    // Create the display components after the layout is ready
-    // DEBUG: Add try/catch for waveform display
-    try {
-      // CHANGE: Pass element directly instead of ID string
-      this.waveformDisplay = new WaveformDisplay(waveformContainer, {
+    // Wait a moment for the DOM to fully update
+    setTimeout(() => {
+      // Create the display components after the layout is ready
+      this.waveformDisplay = new WaveformDisplay('waveform-container', {
         timeWindow: 8, // Show 8 seconds of data
         yRanges: {
           pressure: [0, 40],    // cmH₂O
@@ -72,40 +51,18 @@ class VentilatorSimulationApp {
           volume: [0, 800]      // mL
         }
       });
-      console.log("Waveform display created successfully"); // <-- DEBUGGING CODE
-    } catch (e) {
-      console.error("Error creating waveform display:", e); // <-- DEBUGGING CODE
-    }
-    
-    // DEBUG: Add try/catch for lung visualization
-    try {
+      
       this.lungVisualization = new LungVisualization('lung-canvas');
-      console.log("Lung visualization created successfully"); // <-- DEBUGGING CODE
-    } catch (e) {
-      console.error("Error creating lung visualization:", e); // <-- DEBUGGING CODE
-    }
     
     // Create the UI components
-    // DEBUG: Add try/catch for ventilator controls
-    try {
-      this.ventilatorControls = new VentilatorControlPanel(
-        document.getElementById('ventilator-controls'),
-        this.simulation
-      );
-      console.log("Ventilator controls created successfully"); // <-- DEBUGGING CODE
-    } catch (e) {
-      console.error("Error creating ventilator controls:", e); // <-- DEBUGGING CODE
-    }
+    this.ventilatorControls = new VentilatorControlPanel(
+      document.getElementById('ventilator-controls'),
+      this.simulation
+    );
     
-    // DEBUG: Add try/catch for patient status
-    try {
-      this.patientStatus = new PatientStatusDisplay(
-        document.getElementById('patient-status')
-      );
-      console.log("Patient status display created successfully"); // <-- DEBUGGING CODE
-    } catch (e) {
-      console.error("Error creating patient status display:", e); // <-- DEBUGGING CODE
-    }
+    this.patientStatus = new PatientStatusDisplay(
+      document.getElementById('patient-status')
+    );
     
     // Set up the simulation update loop
     this.simulation.start(state => this.updateDisplays(state));
@@ -117,6 +74,7 @@ class VentilatorSimulationApp {
         this.state.isAdvancedModel = e.target.checked;
       });
     }
+    }, 100); // End of setTimeout
     
     // Add event listeners for patient preset buttons
     const presetButtons = document.querySelectorAll('#patient-presets button');
@@ -135,9 +93,6 @@ class VentilatorSimulationApp {
         }
       });
     });
-    
-    // DEBUG: Log initialization complete
-    console.log("Application initialization complete"); // <-- DEBUGGING CODE
   }
   
   /**
@@ -161,9 +116,20 @@ class VentilatorSimulationApp {
         </div>
         
         <div class="right-panel">
-          <div class="waveform-panel">
+          <div class="waveform-container">
             <h2>Ventilator Waveforms</h2>
-            <div id="waveform-container"></div>
+            <canvas id="waveform-canvas"></canvas>
+            <div class="waveform-controls">
+              <label>
+                <input type="checkbox" checked data-waveform="pressure"> Pressure
+              </label>
+              <label>
+                <input type="checkbox" checked data-waveform="flow"> Flow
+              </label>
+              <label>
+                <input type="checkbox" checked data-waveform="volume"> Volume
+              </label>
+            </div>
           </div>
           
           <div class="lung-visualization-container">
@@ -179,6 +145,8 @@ class VentilatorSimulationApp {
     
     // Apply styles
     this.applyStyles();
+    
+    // Waveform controls are now handled by the WaveformDisplay class
   }
   
   /**

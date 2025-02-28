@@ -33,6 +33,7 @@ class WaveformDisplay {
         flow: [-60, 60],      // L/min
         volume: [0, 800]      // mL
       },
+      residualVolume: 1000,  // Residual volume to subtract from total volume
       waveformHeight: options.waveformHeight || 150,  // Height of each waveform canvas
       waveformSpacing: options.waveformSpacing || 30  // Spacing between waveforms
     };
@@ -448,7 +449,8 @@ class WaveformDisplay {
         break;
       case 'volume':
         // Adjust volume to show tidal volume (current - residual)
-        value = visibleData[0].patient.volume - 1000; // Remove residual volume
+        // Make sure it doesn't go below zero for display purposes
+        value = Math.max(0, visibleData[0].patient.volume - this.options.residualVolume);
         break;
     }
     
