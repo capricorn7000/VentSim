@@ -471,8 +471,9 @@ class WaveformDisplay {
           value = visibleData[i].patient.flow * 0.06;
           break;
         case 'volume':
-          // Adjust volume to show tidal volume
-          value = visibleData[i].patient.volume - 1000; // Remove residual volume
+          // Adjust volume to show tidal volume (current - residual)
+          // Make sure it doesn't go below zero for display purposes
+          value = Math.max(0, visibleData[i].patient.volume - this.options.residualVolume);
           break;
       }
       

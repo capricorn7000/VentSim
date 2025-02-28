@@ -24,6 +24,12 @@ class VentilatorControlPanel {
     
     // Initialize the UI
     this.initializeUI();
+    
+    // Set up event listeners
+    this.setupEventListeners();
+    
+    // Initialize patient parameters based on simulation
+    this.updatePatientParameterControls();
   }
   
   /**
@@ -155,12 +161,6 @@ class VentilatorControlPanel {
     
     // Add the panel to the container
     this.container.appendChild(panel);
-    
-    // Set up event listeners
-    this.setupEventListeners();
-    
-    // Initialize patient parameters based on simulation
-    this.updatePatientParameterControls();
     
     // Apply initial CSS
     this.applyStyles();
